@@ -1,0 +1,63 @@
+﻿<Window x:Class="Updater.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Updater"
+        mc:Ignorable="d" Background="#f9fcff"
+        Title="LPS0A Updater" MinHeight="400" Height="0" MinWidth="350" Width="0"
+        Closing="Window_Closing" Loaded="Window_Loaded">
+    <Window.Resources>
+        <local:InverseBooleanConverter x:Key="boolInverse"/>
+        <local:BoolPortStatueToStrConverter x:Key="portStatue"/>
+    </Window.Resources>
+    <Grid>
+        <Grid Margin="15" Background="White">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="30"/>
+                <RowDefinition Height="30"/>
+                <RowDefinition Height="45"/>
+                <RowDefinition Height="45"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="20,0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+                <ComboBox x:Name="cbxUart" Grid.Column="0" ItemsSource="{Binding UartList}" SelectedItem="{Binding SelectedUart}" IsEnabled="{Binding UartOpened, Converter={StaticResource boolInverse}}" Margin="3,0"/>
+                <Button x:Name="btnPort" Content="{Binding UartOpened,Converter={StaticResource portStatue}}" Grid.Column="1" Margin="3,0" Click="BtnPort_Click"/>
+            </Grid>
+
+            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="20,0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Text="{Binding BinPath}" x:Name="tbxBrowseFile" TextAlignment="Left" Grid.Column="0" VerticalAlignment="Bottom" Margin="3,0"/>
+                <Button Content="Browse Bin" x:Name="btnBrowseFile" Click="BtnBrowseFile_Click" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="3,0"/>
+            </Grid>
+
+
+            <Button Content="Read Version" Click="BtnReadVer_Click" x:Name="btnReadVer" Grid.Row="2" Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
+            <Button Content="Ready to Update" Click="BtnReadyToUpdate_Click" x:Name="btnReadyToUpdate" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
+            <Button Content="Start Update" Click="BtnStartUpdate_Click" x:Name="btnStartUpdate" Grid.Row="3" Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
+            <Button Content="Finish Update" Click="BtnFinishUpdate_Click" x:Name="btnFinishUpdate" Grid.Row="3" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
+
+            <RichTextBox Background="Black" Foreground="LawnGreen" x:Name="rtbLog" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Stretch" HorizontalAlignment="Left" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" >
+                <RichTextBox.Resources>
+                    <Style TargetType="Paragraph">
+                        <Setter Property="Margin" Value="0"/>
+                    </Style>
+                </RichTextBox.Resources>
+            </RichTextBox>
+        </Grid>
+        <TextBlock Text="Create by Simon" Foreground="LawnGreen" Opacity="0.2" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="5,0,0,1"/>
+        <TextBlock Text="{Binding VersionInfo}" Foreground="Gray" Opacity="0.5" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,5,1"/>
+    </Grid>
+</Window>
