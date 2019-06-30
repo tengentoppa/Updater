@@ -35,6 +35,8 @@ namespace Updater
         ObservableCollection<string> uartList = new ObservableCollection<string>();
         string selectedUart;
         bool uartOpened = false;
+        bool updating = false;
+        bool accessible = false;
         List<byte> UartRxData = new List<byte>();
 
         UART Uart;
@@ -48,7 +50,9 @@ namespace Updater
             set { binPath = value; OnPropertyChanged(nameof(BinPath)); UpdateData = ReadAllByteFromFile(value); }
         }
         public string SelectedUart { get { return selectedUart; } set { selectedUart = value; OnPropertyChanged(nameof(SelectedUart)); } }
-        public bool UartOpened { get { return uartOpened; } set { uartOpened = value; OnPropertyChanged(nameof(UartOpened)); } }
+        public bool UartOpened { get { return uartOpened; } set { uartOpened = value; OnPropertyChanged(nameof(UartOpened)); Accessible = uartOpened & !updating; } }
+        public bool Updating { get { return updating; } set { updating = value; Accessible = uartOpened & !updating; } }
+        public bool Accessible { get { return accessible; } set { accessible = value; OnPropertyChanged(nameof(Accessible)); } }
         public ObservableCollection<string> UartList {
             get { return uartList; }
             set {
@@ -96,22 +100,27 @@ namespace Updater
         }
         private void ReceivedData(byte[] data)
         {
-            if (data == null || data.Length == 0) { return; }
             OutLog("Rx Data", NumConverter.ToHexString(data));
             UartRxData.AddRange(data);
             var lps50aData = LPS50A.ParseData(UartRxData);
+            if (lps50aData == null) { return; }
             foreach (var lps50a in lps50aData)
             {
                 var d = new LPS50A(lps50a);
-                if (!d.Formated) { continue; }
+                if (d == null || !d.Formated) { continue; }
 
+                OutLog("LPS50A Data", d.ToString());
                 qLPS50A.Enqueue(d);
             }
+        }
+        private void TransedData(List<byte> data)
+        {
+            OutLog("Tx Data", NumConverter.ToHexString(data));
         }
 
         private void OutLog(string title, string conent)
         {
-            qLog.Enqueue(WriteLog.GetFmtStr("Rx Data", conent));
+            qLog.Enqueue(WriteLog.GetFmtStr(title, conent));
         }
 
         private bool WaitRx(LPS50A.CMD cmd, int timeout)
@@ -130,9 +139,9 @@ namespace Updater
         #region WindowEvent
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            Task.Run(() => { while (true) { Thread.Sleep(10); outToLog(); } });
+            Task.Run(() => { while (true) { Thread.Sleep(20); outToLog(); } });
         }
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void Window_Closing(object sender, CancelEventArgs e)
         {
             CloseUart();
             Settings.Default.MainWindowPlacement = this.GetPlacement();
@@ -284,15 +293,10 @@ namespace Updater
         private void InitUart(string selectedUart, int buadRate)
         {
             Uart = new UART(selectedUart, buadRate);
-            Uart.StartReceiveData(ReceivedData); //TODO
+            Uart.StartReceiveData(ReceivedData);
             Uart.TxFunc += TransedData;
             Uart.Open();
             Uart.ClearBuffer();
-        }
-
-        private void TransedData(List<byte> obj)
-        {
-            throw new NotImplementedException();
         }
         #endregion
     }

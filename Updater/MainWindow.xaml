@@ -39,17 +39,17 @@
                     <ColumnDefinition Width="2*"/>
                     <ColumnDefinition Width="1*"/>
                 </Grid.ColumnDefinitions>
-                <TextBox Text="{Binding BinPath}" x:Name="tbxBrowseFile" TextAlignment="Left" Grid.Column="0" VerticalAlignment="Bottom" Margin="3,0"/>
-                <Button Content="Browse Bin" x:Name="btnBrowseFile" Click="BtnBrowseFile_Click" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="3,0"/>
+                <TextBox x:Name="tbxBrowseFile" TextAlignment="Left" Grid.Column="0" VerticalAlignment="Bottom" Margin="3,0" Text="{Binding BinPath}" IsEnabled="{Binding Accessible}"/>
+                <Button Content="Browse Bin" x:Name="btnBrowseFile" Click="BtnBrowseFile_Click" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="3,0" IsEnabled="{Binding Accessible}"/>
             </Grid>
 
 
-            <Button Content="Read Version" Click="BtnReadVer_Click" x:Name="btnReadVer" Grid.Row="2" Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
-            <Button Content="Ready to Update" Click="BtnReadyToUpdate_Click" x:Name="btnReadyToUpdate" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
-            <Button Content="Start Update" Click="BtnStartUpdate_Click" x:Name="btnStartUpdate" Grid.Row="3" Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
-            <Button Content="Finish Update" Click="BtnFinishUpdate_Click" x:Name="btnFinishUpdate" Grid.Row="3" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding UartOpened}"/>
+            <Button Content="Read Version" Click="BtnReadVer_Click" x:Name="btnReadVer" Grid.Row="2" Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding Accessible}"/>
+            <Button Content="Ready to Update" Click="BtnReadyToUpdate_Click" x:Name="btnReadyToUpdate" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding Accessible}"/>
+            <Button Content="Start Update" Click="BtnStartUpdate_Click" x:Name="btnStartUpdate" Grid.Row="3" Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding Accessible}"/>
+            <Button Content="Finish Update" Click="BtnFinishUpdate_Click" x:Name="btnFinishUpdate" Grid.Row="3" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="20,10" IsEnabled="{Binding Accessible}"/>
 
-            <RichTextBox Background="Black" Foreground="LawnGreen" x:Name="rtbLog" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Stretch" HorizontalAlignment="Left" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" >
+            <RichTextBox Background="Black" Foreground="LawnGreen" x:Name="rtbLog" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Stretch" HorizontalAlignment="Left" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12">
                 <RichTextBox.Resources>
                     <Style TargetType="Paragraph">
                         <Setter Property="Margin" Value="0"/>

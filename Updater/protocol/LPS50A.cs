@@ -144,6 +144,7 @@ namespace MP_Module
 
         public void FormatData(List<byte> source)
         {
+            if (source == null) { return; }
             int totalLen = source.Count;
             if (totalLen < 4) { return; }
             if (source[0] != RSTX) { return; }
