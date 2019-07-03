@@ -24,13 +24,9 @@ namespace MP_Module
         /// <returns>16進制字串</returns>
         public static string ToHexString(byte[] data)
         {
-            string result;
-            try
-            {
-                result = BitConverter.ToString(data);
-            }
-            catch { throw; }
-            return result;
+            if (data == null || data.Length == 0) { return "N/A"; }
+
+            return BitConverter.ToString(data);
         }
 
         /// <summary>

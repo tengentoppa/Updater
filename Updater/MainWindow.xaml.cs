@@ -4,14 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Interop;
 using Updater.Properties;
@@ -28,15 +26,17 @@ namespace Updater
         readonly string STARTUP_PATH = AppDomain.CurrentDomain.BaseDirectory;
         const int BAUD_RATE = 115200;
         const uint MAX_FILE_SIZE = ushort.MaxValue;
-        const uint BytePerPack = 0x10;
-        const byte MakeupByte = 0xFF;
+        const uint BYTE_PER_PACK = 0x40;
+        const byte MAKEUP_BYTE = 0xFF;
+        const int COMMON_TIMEOUT_MIL = 3000;
 
         string binPath = AppDomain.CurrentDomain.BaseDirectory;
         ObservableCollection<string> uartList = new ObservableCollection<string>();
         string selectedUart;
-        bool uartOpened = false;
+        bool uartOpened = true;
         bool updating = false;
-        bool accessible = false;
+        bool accessible = true;
+        bool updatePaused = false;
         List<byte> UartRxData = new List<byte>();
 
         UART Uart;
@@ -49,10 +49,26 @@ namespace Updater
             get { if (!(File.Exists(binPath) || Directory.Exists(binPath))) { binPath = STARTUP_PATH; } return binPath; }
             set { binPath = value; OnPropertyChanged(nameof(BinPath)); UpdateData = ReadAllByteFromFile(value); }
         }
-        public string SelectedUart { get { return selectedUart; } set { selectedUart = value; OnPropertyChanged(nameof(SelectedUart)); } }
-        public bool UartOpened { get { return uartOpened; } set { uartOpened = value; OnPropertyChanged(nameof(UartOpened)); Accessible = uartOpened & !updating; } }
-        public bool Updating { get { return updating; } set { updating = value; Accessible = uartOpened & !updating; } }
-        public bool Accessible { get { return accessible; } set { accessible = value; OnPropertyChanged(nameof(Accessible)); } }
+        public string SelectedUart {
+            get { return selectedUart; }
+            set { selectedUart = value; OnPropertyChanged(nameof(SelectedUart)); }
+        }
+        public bool UartOpened {
+            get { return uartOpened; }
+            set { if (!OpenCloseUart(value)) { return; } uartOpened = value; OnPropertyChanged(nameof(UartOpened)); Accessible = uartOpened & !updating; }
+        }
+        public bool Updating {
+            get { return updating; }
+            set { updating = value; Accessible = uartOpened & !updating; OnPropertyChanged(nameof(Updating)); }
+        }
+        public bool Accessible {
+            get { return accessible; }
+            set { accessible = value; OnPropertyChanged(nameof(Accessible)); }
+        }
+        public bool UpdatePaused {
+            get { return updatePaused; }
+            set { updatePaused = value; OnPropertyChanged(nameof(UpdatePaused)); }
+        }
         public ObservableCollection<string> UartList {
             get { return uartList; }
             set {
@@ -95,7 +111,7 @@ namespace Updater
             if (!File.Exists(filePath)) { return null; }
             var data = File.ReadAllBytes(filePath).ToList();
             if (data.Count > MAX_FILE_SIZE) { return null; }
-            if (data.Count % BytePerPack != 0) { data.AddRange(new List<byte>(Enumerable.Repeat(MakeupByte, (int)(BytePerPack - (data.Count % BytePerPack))))); }
+            if (data.Count % BYTE_PER_PACK != 0) { data.AddRange(new List<byte>(Enumerable.Repeat(MAKEUP_BYTE, (int)(BYTE_PER_PACK - (data.Count % BYTE_PER_PACK))))); }
             return data;
         }
         private void ReceivedData(byte[] data)
@@ -123,15 +139,19 @@ namespace Updater
             qLog.Enqueue(WriteLog.GetFmtStr(title, conent));
         }
 
-        private bool WaitRx(LPS50A.CMD cmd, int timeout)
+        private bool WaitRx(LPS50A comparer, bool abortWhenWrongRx = false, int timeout = COMMON_TIMEOUT_MIL)
         {
+            if (comparer == null) { throw new ArgumentNullException("comparer", "Comparer can't be null."); }
             DateTime dtStart = DateTime.Now;
             while ((DateTime.Now - dtStart).TotalMilliseconds < timeout)
             {
                 while (qLPS50A.Count > 0)
                 {
                     var data = qLPS50A.Dequeue();
-                    if (data.Cmd == cmd && data.Statue == LPS50A.ErrorStatue.Success) { return true; }
+                    if (data.Cmd == (comparer.Cmd ?? data.Cmd) &&
+                        data.Statue == (comparer.Statue ?? data.Statue)
+                        ) { return true; }
+                    if (abortWhenWrongRx) { return false; }
                 }
             }
             return false;
@@ -143,7 +163,7 @@ namespace Updater
         }
         private void Window_Closing(object sender, CancelEventArgs e)
         {
-            CloseUart();
+            UartOpened = false;
             Settings.Default.MainWindowPlacement = this.GetPlacement();
             Settings.Default.Save();
         }
@@ -162,12 +182,7 @@ namespace Updater
         #region ButtonEvent
         private void BtnPort_Click(object sender, RoutedEventArgs e)
         {
-#if DEBUG
             UartOpened = !UartOpened;
-#endif
-#if !DEBUG
-            if (UartOpened) { CloseUart(); } else { OpenUart(); }
-#endif
         }
         private void BtnBrowseFile_Click(object sender, RoutedEventArgs e)
         {
@@ -190,46 +205,43 @@ namespace Updater
         }
         private void BtnStartUpdate_Click(object sender, RoutedEventArgs e)
         {
-            btnPort.IsEnabled = false;
-            btnFinishUpdate.IsEnabled = false;
-            btnReadVer.IsEnabled = false;
-            btnReadyToUpdate.IsEnabled = false;
-            btnStartUpdate.IsEnabled = false;
-
             if (UpdateData == null) { MessageBox.Show("File not loaded"); return; }
             ushort dataCount = 0;
             List<byte> data;
+            Updating = true;
             Task.Run(() =>
             {
                 try
                 {
-                    for (int i = 0; i < UpdateData.Count; i += (int)BytePerPack)
+                    for (int i = 0; i < UpdateData.Count; i += (int)BYTE_PER_PACK)
                     {
+                        if (!Updating) { return; }
+                        if (UpdatePaused) { SpinWait.SpinUntil(() => { return !UpdatePaused || !Updating; }); }
                         var count = BitConverter.GetBytes(dataCount);
                         if (BitConverter.IsLittleEndian) { Array.Reverse(count); }
                         data = new List<byte> { count[0], count[1] };
-                        data.AddRange(UpdateData.GetRange(i, (int)BytePerPack));
+                        data.AddRange(UpdateData.GetRange(i, (int)BYTE_PER_PACK));
                         qLPS50A.Clear();
                         Uart.SendData(LPS50A.PackData(LPS50A.CMD.TransUpdateData, data));
-
-                        if (!WaitRx(LPS50A.CMD.TransUpdateData, 3000)) { return; }
+                        if (!Updating) { return; }
+                        if (!WaitRx(new LPS50A(LPS50A.CMD.TransUpdateData, LPS50A.ErrorStatue.Success), true)) { return; }
                         dataCount++;
                     }
                 }
                 finally
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        btnPort.IsEnabled = true;
-                        btnFinishUpdate.IsEnabled = true;
-                        btnReadVer.IsEnabled = true;
-                        btnReadyToUpdate.IsEnabled = true;
-                        btnStartUpdate.IsEnabled = true;
-                    });
+                    Updating = false;
                 }
             });
         }
-
+        private void BtnStop_Click(object sender, RoutedEventArgs e)
+        {
+            Updating = false;
+        }
+        private void BtnPauseAndResume_Click(object sender, RoutedEventArgs e)
+        {
+            UpdatePaused = !UpdatePaused;
+        }
         private void BtnFinishUpdate_Click(object sender, RoutedEventArgs e)
         {
             var checkSum = UpdateData.Aggregate((x, y) => { return (byte)(x ^ y); });
@@ -270,26 +282,38 @@ namespace Updater
                 cbxUart.SelectedIndex = index;
                 return;
             }
-            CloseUart();
+            UartOpened = false;
         }
-        private void OpenUart()
+        private bool OpenCloseUart(bool openUart)
         {
-            if (string.IsNullOrEmpty(SelectedUart)) { return; }
-            if (!UartList.Contains(SelectedUart)) { return; }
+            if (openUart) { return OpenUart(); } else { return CloseUart(); }
+        }
+        private bool OpenUart()
+        {
+            if (string.IsNullOrEmpty(SelectedUart)) { return false; }
+            if (!UartList.Contains(SelectedUart)) { return false; }
             try
             {
                 InitUart(SelectedUart, BAUD_RATE);
+                return true;
             }
-            catch { return; }
-            UartOpened = true;
+            catch { return false; }
         }
-        private void CloseUart()
+        private bool CloseUart()
         {
-            UartOpened = false;
-            if (Uart == null) { return; }
+            if (Uart == null) { return true; }
+            StopUartAction();
             Uart.StopReceiveData();
             Uart.Close();
+            return true;
         }
+
+        private void StopUartAction()
+        {
+            Updating = false;
+            UpdatePaused = false;
+        }
+
         private void InitUart(string selectedUart, int buadRate)
         {
             Uart = new UART(selectedUart, buadRate);
@@ -300,36 +324,4 @@ namespace Updater
         }
         #endregion
     }
-
-    #region Binding Converter
-    [ValueConversion(typeof(bool), typeof(bool))]
-    public class InverseBooleanConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (targetType != typeof(bool)) { throw new InvalidOperationException("The target must be a boolean"); }
-            return !(bool)value;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotSupportedException();
-        }
-    }
-
-    [ValueConversion(typeof(bool), typeof(object))]
-    public class BoolPortStatueToStrConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (targetType != typeof(object)) { throw new InvalidOperationException("The target must be a object"); }
-            return (!(bool)value) ? "Open" : "Close";
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotSupportedException();
-        }
-    }
-    #endregion
 }

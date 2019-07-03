@@ -15,6 +15,7 @@ namespace MP_Module
         };
         public enum ErrorStatue
         {
+            None = 0xFF,
             Success = 0x00,
             Fail = 0x01,
         }
@@ -131,12 +132,13 @@ namespace MP_Module
         #endregion
 
         #region Dynamic Zone
-        public CMD Cmd { get; protected set; }
-        public ErrorStatue Statue { get; protected set; } = ErrorStatue.Success;
+        public CMD? Cmd { get; protected set; } = null;
+        public ErrorStatue? Statue { get; protected set; } = null;
         public List<byte> Data { get; protected set; } = null;
         public int DataLen { get; protected set; } = 0;
         public bool Formated { get; protected set; } = false;
 
+        public LPS50A(CMD? cmd = null, ErrorStatue? statue = null) { Cmd = cmd; Statue = statue; }
         public LPS50A(List<byte> source)
         {
             FormatData(source);
@@ -148,24 +150,25 @@ namespace MP_Module
             int totalLen = source.Count;
             if (totalLen < 4) { return; }
             if (source[0] != RSTX) { return; }
+            if (source[2] + 4 != totalLen) { return; }  //DataLen + [HEAD + END](4 bytes)
+            Cmd = (CMD)source[1];
             DataLen = source[2];
-            if (DataLen + 4 != totalLen) { return; }
-            try
-            {
-                Cmd = (CMD)source[1];
-            }
-            catch { throw; }
-
             if (DataLen > 0)
             {
-                Data = source.GetRange(3, DataLen);
+                Statue = (ErrorStatue)source[3];
+                DataLen--;
+                if (DataLen > 0)
+                {
+                    Data = source.GetRange(3, DataLen);
+                }
             }
             Formated = true;
         }
 
         public override string ToString()
         {
-            return $"CMD: {Cmd}, DataLen: {DataLen}, Data: {NumConverter.ToHexString(Data)}";
+            if (!Formated) return "Not Formated";
+            return $"CMD: {(Cmd == null ? "N/A" : Cmd.ToString())}, DataLen: {DataLen}, Data: {NumConverter.ToHexString(Data)}";
         }
         #endregion
     }
