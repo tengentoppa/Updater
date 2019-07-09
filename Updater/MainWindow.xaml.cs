@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Interop;
+using Updater.helper;
 using Updater.Properties;
 using WindowPlacementHelper;
 
@@ -24,11 +25,11 @@ namespace Updater
     {
         #region Define zone
         readonly string STARTUP_PATH = AppDomain.CurrentDomain.BaseDirectory;
-        const int BAUD_RATE = 115200;
         const uint MAX_FILE_SIZE = ushort.MaxValue;
-        const uint BYTE_PER_PACK = 0x40;
-        const byte MAKEUP_BYTE = 0xFF;
-        const int COMMON_TIMEOUT_MIL = 3000;
+        const int COMMON_TIMEOUT_MS = 3000;
+        const string SETTINGS_FILE_PATH = "settings.xml";
+
+        UpdaterSetting Settings;
 
         string binPath = AppDomain.CurrentDomain.BaseDirectory;
         ObservableCollection<string> uartList = new ObservableCollection<string>();
@@ -92,8 +93,35 @@ namespace Updater
         }
         private void Init()
         {
+            LoadSettings(SETTINGS_FILE_PATH);
             SearchUart();
         }
+
+        private UpdaterSetting LoadSettings(string path)
+        {
+            var result = new UpdaterSetting();
+            try
+            {
+                var content = File.ReadAllText(path);
+                result = XmlHelper.Deserialize<UpdaterSetting>(content);
+            }
+            catch
+            {
+                SaveSettings(SETTINGS_FILE_PATH, result);
+            }
+            return result;
+        }
+
+        private void SaveSettings(string path, UpdaterSetting settings)
+        {
+            try
+            {
+                var saveString = XmlHelper.Serialize(settings);
+                File.WriteAllText(path, saveString);
+            }
+            catch { }
+        }
+
         void outToLog()
         {
             if (qLog.Count == 0) { return; }
@@ -106,12 +134,13 @@ namespace Updater
             });
         }
 
+        #region Data Process
         private List<byte> ReadAllByteFromFile(string filePath)
         {
             if (!File.Exists(filePath)) { return null; }
             var data = File.ReadAllBytes(filePath).ToList();
             if (data.Count > MAX_FILE_SIZE) { return null; }
-            if (data.Count % BYTE_PER_PACK != 0) { data.AddRange(new List<byte>(Enumerable.Repeat(MAKEUP_BYTE, (int)(BYTE_PER_PACK - (data.Count % BYTE_PER_PACK))))); }
+            if (data.Count % Settings.BYTE_PER_PACK != 0) { data.AddRange(new List<byte>(Enumerable.Repeat(Settings.PADDING_BYTE, (int)(Settings.BYTE_PER_PACK - (data.Count % Settings.BYTE_PER_PACK))))); }
             return data;
         }
         private void ReceivedData(byte[] data)
@@ -139,7 +168,7 @@ namespace Updater
             qLog.Enqueue(WriteLog.GetFmtStr(title, conent));
         }
 
-        private bool WaitRx(LPS50A comparer, bool abortWhenWrongRx = false, int timeout = COMMON_TIMEOUT_MIL)
+        private bool WaitRx(LPS50A comparer, bool abortWhenWrongRx = false, int timeout = COMMON_TIMEOUT_MS)
         {
             if (comparer == null) { throw new ArgumentNullException("comparer", "Comparer can't be null."); }
             DateTime dtStart = DateTime.Now;
@@ -156,6 +185,8 @@ namespace Updater
             }
             return false;
         }
+        #endregion
+
         #region WindowEvent
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -164,14 +195,14 @@ namespace Updater
         private void Window_Closing(object sender, CancelEventArgs e)
         {
             UartOpened = false;
-            Settings.Default.MainWindowPlacement = this.GetPlacement();
-            Settings.Default.Save();
+            Properties.Settings.Default.MainWindowPlacement = (this).GetPlacement();
+            Properties.Settings.Default.Save();
         }
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
 
-            this.SetPlacement(Settings.Default.MainWindowPlacement);
+            (this).SetPlacement(Properties.Settings.Default.MainWindowPlacement);
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
             HwndSource.FromHwnd(hwnd).AddHook(new HwndSourceHook(WndProc));
 
@@ -179,7 +210,7 @@ namespace Updater
         }
         #endregion
 
-        #region ButtonEvent
+        #region Button Event
         private void BtnPort_Click(object sender, RoutedEventArgs e)
         {
             UartOpened = !UartOpened;
@@ -213,14 +244,14 @@ namespace Updater
             {
                 try
                 {
-                    for (int i = 0; i < UpdateData.Count; i += (int)BYTE_PER_PACK)
+                    for (int i = 0; i < UpdateData.Count; i += (int)Settings.BYTE_PER_PACK)
                     {
                         if (!Updating) { return; }
                         if (UpdatePaused) { SpinWait.SpinUntil(() => { return !UpdatePaused || !Updating; }); }
                         var count = BitConverter.GetBytes(dataCount);
                         if (BitConverter.IsLittleEndian) { Array.Reverse(count); }
                         data = new List<byte> { count[0], count[1] };
-                        data.AddRange(UpdateData.GetRange(i, (int)BYTE_PER_PACK));
+                        data.AddRange(UpdateData.GetRange(i, (int)Settings.BYTE_PER_PACK));
                         qLPS50A.Clear();
                         Uart.SendData(LPS50A.PackData(LPS50A.CMD.TransUpdateData, data));
                         if (!Updating) { return; }
@@ -244,6 +275,7 @@ namespace Updater
         }
         private void BtnFinishUpdate_Click(object sender, RoutedEventArgs e)
         {
+            if (UpdateData == null) { MessageBox.Show("File not loaded"); return; }
             var checkSum = UpdateData.Aggregate((x, y) => { return (byte)(x ^ y); });
             Uart.SendData(LPS50A.PackData(LPS50A.CMD.InstallUpdateData, checkSum));
         }
@@ -294,7 +326,7 @@ namespace Updater
             if (!UartList.Contains(SelectedUart)) { return false; }
             try
             {
-                InitUart(SelectedUart, BAUD_RATE);
+                InitUart(SelectedUart, Settings.BAUD_RATE);
                 return true;
             }
             catch { return false; }
@@ -323,5 +355,12 @@ namespace Updater
             Uart.ClearBuffer();
         }
         #endregion
+    }
+
+    public class UpdaterSetting
+    {
+        public int BAUD_RATE { get; set; } = 115200;
+        public uint BYTE_PER_PACK { get; set; } = 0x40;
+        public byte PADDING_BYTE { get; set; } = 0xFF;
     }
 }
