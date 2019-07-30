@@ -168,7 +168,7 @@ namespace MP_Module
         public override string ToString()
         {
             if (!Formated) return "Not Formated";
-            return $"CMD: {(Cmd == null ? "N/A" : Cmd.ToString())}, DataLen: {DataLen}, Data: {NumConverter.ToHexString(Data)}";
+            return $"CMD: {(Cmd == null ? "N/A" : Cmd.ToString())}, DataLen: {DataLen}, Data: ";
         }
         #endregion
     }

@@ -29,14 +29,14 @@ namespace Updater
         const int COMMON_TIMEOUT_MS = 3000;
         const string SETTINGS_FILE_PATH = "settings.xml";
 
-        UpdaterSetting Settings;
+        UpdaterSetting Settings = new UpdaterSetting();
 
         string binPath = AppDomain.CurrentDomain.BaseDirectory;
         ObservableCollection<string> uartList = new ObservableCollection<string>();
         string selectedUart;
-        bool uartOpened = true;
+        bool uartOpened = false;
         bool updating = false;
-        bool accessible = true;
+        bool accessible = false;
         bool updatePaused = false;
         List<byte> UartRxData = new List<byte>();
 
@@ -93,7 +93,7 @@ namespace Updater
         }
         private void Init()
         {
-            LoadSettings(SETTINGS_FILE_PATH);
+            Settings = LoadSettings(SETTINGS_FILE_PATH);
             SearchUart();
         }
 
