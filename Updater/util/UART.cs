@@ -72,7 +72,12 @@ namespace MP_Module
                 StopReceiveData();
                 return;
             }
-            var rcvData = ReceiveAllData();
+            byte[] rcvData;
+            try
+            {
+                rcvData = ReceiveAllData();
+            }
+            catch (Exception exp) { Console.WriteLine(exp.Message); return; }
             if (rcvData == null || rcvData.Length == 0) { return; }
             RxFunc?.Invoke(rcvData);
         }

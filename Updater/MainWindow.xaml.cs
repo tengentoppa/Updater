@@ -29,7 +29,7 @@ namespace Updater
         const int COMMON_TIMEOUT_MS = 3000;
         const string SETTINGS_FILE_PATH = "settings.xml";
 
-        UpdaterSetting Settings = new UpdaterSetting();
+        UpdaterSetting Settings;
 
         string binPath = AppDomain.CurrentDomain.BaseDirectory;
         ObservableCollection<string> uartList = new ObservableCollection<string>();
@@ -224,7 +224,7 @@ namespace Updater
         }
         private void BtnReadVer_Click(object sender, RoutedEventArgs e)
         {
-            //Uart.SendData(NumConverter.HexStringToListByte(""));
+            Uart.SendData(LPS50A.PackData(LPS50A.CMD.ReadVersion));
         }
         private void BtnReadyToUpdate_Click(object sender, RoutedEventArgs e)
         {
@@ -238,30 +238,48 @@ namespace Updater
         {
             if (UpdateData == null) { MessageBox.Show("File not loaded"); return; }
             ushort dataCount = 0;
+            int rtyTime;
+            bool updateSuccess = false;
+            long packAmts = UpdateData.Count / Settings.BYTE_PER_PACK;
+
+            OutLog("Update Data", $"\nTotal Length: {UpdateData.Count}," +
+                $"\nBytes Per Pack: {Settings.BYTE_PER_PACK}," +
+                $"\nPacks {packAmts}");
+
             List<byte> data;
             Updating = true;
             Task.Run(() =>
             {
                 try
                 {
-                    for (int i = 0; i < UpdateData.Count; i += (int)Settings.BYTE_PER_PACK)
+                    for (int i = 0; i < packAmts; i++)
                     {
+                        rtyTime = Settings.RETRY_TIME;
                         if (!Updating) { return; }
                         if (UpdatePaused) { SpinWait.SpinUntil(() => { return !UpdatePaused || !Updating; }); }
                         var count = BitConverter.GetBytes(dataCount);
                         if (BitConverter.IsLittleEndian) { Array.Reverse(count); }
                         data = new List<byte> { count[0], count[1] };
-                        data.AddRange(UpdateData.GetRange(i, (int)Settings.BYTE_PER_PACK));
+                        data.AddRange(UpdateData.GetRange((int)(i * Settings.BYTE_PER_PACK), (int)Settings.BYTE_PER_PACK));
+                        rty:
+                        OutLog("Updating", $"{i + 1}/{packAmts}");
+
                         qLPS50A.Clear();
                         Uart.SendData(LPS50A.PackData(LPS50A.CMD.TransUpdateData, data));
                         if (!Updating) { return; }
-                        if (!WaitRx(new LPS50A(LPS50A.CMD.TransUpdateData, LPS50A.ErrorStatue.Success), true)) { return; }
+                        if (!WaitRx(new LPS50A(LPS50A.CMD.TransUpdateData, LPS50A.DataStatue.Success), true))
+                        {
+                            if (rtyTime-- > 0) { goto rty; }
+                            return;
+                        }
                         dataCount++;
                     }
+                    updateSuccess = true;
                 }
                 finally
                 {
                     Updating = false;
+                    OutLog("Update", updateSuccess ? "Success" : "Stoped");
                 }
             });
         }
@@ -362,5 +380,6 @@ namespace Updater
         public int BAUD_RATE { get; set; } = 115200;
         public uint BYTE_PER_PACK { get; set; } = 0x40;
         public byte PADDING_BYTE { get; set; } = 0xFF;
+        public int RETRY_TIME { get; set; } = 2;
     }
 }

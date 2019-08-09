@@ -15,6 +15,7 @@ namespace MP_Module
         /// <returns>16進制字串</returns>
         public static string ToHexString(List<byte> data)
         {
+            if (data == null || data.Count == 0) { return "N/A"; }
             return ToHexString(data.ToArray());
         }
         /// <summary>
@@ -25,7 +26,6 @@ namespace MP_Module
         public static string ToHexString(byte[] data)
         {
             if (data == null || data.Length == 0) { return "N/A"; }
-
             return BitConverter.ToString(data);
         }
 

@@ -9,15 +9,20 @@ namespace MP_Module
         //STX(1) + CMD(1) + Data(N) + CRC(1){ XOR From STX to Data } + ETX(1)
         public enum CMD
         {
+            ReadVersion = 0x01,
             StartUpdate = 0xE0,
             TransUpdateData = 0xE1,
             InstallUpdateData = 0xE2
         };
-        public enum ErrorStatue
+        public enum DataStatue
         {
             None = 0xFF,
             Success = 0x00,
-            Fail = 0x01,
+            Fail_Package = 0x01,
+            Fail_Other = 0x02,
+            Fail_CheckSum = 0x03,
+            Fail_CMD_Type = 0x04,
+            Fail_BLE = 0x05,
         }
         const byte SSTX = 0x80;
         const byte RSTX = 0x80;
@@ -133,12 +138,12 @@ namespace MP_Module
 
         #region Dynamic Zone
         public CMD? Cmd { get; protected set; } = null;
-        public ErrorStatue? Statue { get; protected set; } = null;
+        public DataStatue? Statue { get; protected set; } = null;
         public List<byte> Data { get; protected set; } = null;
         public int DataLen { get; protected set; } = 0;
         public bool Formated { get; protected set; } = false;
 
-        public LPS50A(CMD? cmd = null, ErrorStatue? statue = null) { Cmd = cmd; Statue = statue; }
+        public LPS50A(CMD? cmd = null, DataStatue? statue = null) { Cmd = cmd; Statue = statue; }
         public LPS50A(List<byte> source)
         {
             FormatData(source);
@@ -155,7 +160,7 @@ namespace MP_Module
             DataLen = source[2];
             if (DataLen > 0)
             {
-                Statue = (ErrorStatue)source[3];
+                Statue = (DataStatue)source[3];
                 DataLen--;
                 if (DataLen > 0)
                 {
@@ -168,7 +173,10 @@ namespace MP_Module
         public override string ToString()
         {
             if (!Formated) return "Not Formated";
-            return $"CMD: {(Cmd == null ? "N/A" : Cmd.ToString())}, DataLen: {DataLen}, Data: ";
+            return $"\nCMD: {(Cmd == null ? "N/A" : Cmd.ToString())}," +
+                $"\nData Statue:{Statue}," +
+                $"\nDataLen: {DataLen}," +
+                $"\nData: {NumConverter.ToHexString(Data)}";
         }
         #endregion
     }
